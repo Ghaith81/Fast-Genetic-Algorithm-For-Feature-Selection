@@ -179,13 +179,13 @@ class Evolution:
             if (r < 0):
                 r = 0
             num = n_individual
-            stderr = 1.0 / math.sqrt(num - 3)
-            delta = 1.96 * stderr
-            lower = math.tanh(math.atanh(r) - delta)
+            #stderr = 1.0 / math.sqrt(num - 3)
+            #delta = 1.96 * stderr
+            #lower = math.tanh(math.atanh(r) - delta)
             # print(coef, lower)
             # distance = (1-coef)+sample_size/baseline_individual.X_train.shape[0]
-            distance = (1 - lower) + approximation_time / original_fitness_time
-            print(sample_size, coef, distance)
+            distance = (1 - coef) + approximation_time / original_fitness_time
+            #print(sample_size, coef, distance)
             # print((c1.instances))
             if (distance < best):
                 best = distance
@@ -299,6 +299,8 @@ class Evolution:
 
         gaqx_individual.set_instances(selected_instances)
 
+        print('Meta-model sample size:', len(selected_instances))
+
         task = 'feature_selection'
         target_dataset = 'validation'
         ind_size = gaqx_individual.X_train.shape[1]
@@ -309,11 +311,13 @@ class Evolution:
         best = 0
         no_change = 0
         d = ind_size // 4
+        generation = 0
         while (no_change < f_no_change):
             no_change += 1
-            log_df, population, d = Evolution.CHC(gaqx_individual, toolbox, d, population, max_generations=f, verbose=1)
+            log_df, population, d = Evolution.CHC(gaqx_individual, toolbox, d, population, max_generations=f, verbose=0)
             fitness_sum = 0
             ind_id = 0
+            generation+=f
             for ind in population:
                 ind_id += 1
                 if ind not in evaluated_population:
@@ -325,7 +329,8 @@ class Evolution:
                         row = [ind, gaqx_time, fitness]
                         gaqx_log_df.loc[len(gaqx_log_df)] = row
                         if (verbose):
-                            print(ind_id, row)
+                            print("Best Individual = ", np.round(fitness, 4),  ", Gen = ", generation, '\r', end='')
+
                         best = fitness
                         no_change = 0
 
@@ -555,7 +560,7 @@ class Evolution:
             # find and print best individual:
             best_index = fitnessValues.index(max(fitnessValues))
             if (verbose):
-                print("Best Individual = ", np.round(maxFitness, 2), ", Gen = ", generationCounter, '\r', end='')
+                print("Best Individual = ", np.round(maxFitness, 4), ", Gen = ", generationCounter, '\r', end='')
             # print()
             #print(np.round(maxFitness, 2), 'number of paired:', numberOfPaired, 'number of mutations:',
             #      numberOfMutation, ' d:', d, ' no change:', noChange)
@@ -580,6 +585,9 @@ class Evolution:
         gaqx_individual = copy.deepcopy(baseline_individual)
         gaqx_individual.set_instances(selected_instances)
         ind_size = gaqx_individual.X_train.shape[1]
+
+        print('Meta-model sample size:', len(selected_instances))
+
         if (not n_particles):
             n_particles = ind_size
 
@@ -595,12 +603,14 @@ class Evolution:
         evaluated_population = []
         best = 0
         no_change = 0
+        step = 0
         while (no_change < f_no_change):
             no_change += 1
             opt.optimize(Evolution.f, iters=f, verbose=0, task=task, target_dataset=target_dataset,
                                      baseline_individual=gaqx_individual)
             fitness_sum = 0
             ind_id = 0
+            step+=f
             for ind in opt.swarm.pbest_pos[np.argsort(opt.swarm.pbest_cost)]:
                 ind = np.where(ind > 0.5, 1, 0)
                 ind = list(ind)
@@ -614,14 +624,14 @@ class Evolution:
                         row = [ind, gaqx_time, fitness]
                         gaqx_log_df.loc[len(gaqx_log_df)] = row
                         if (verbose):
-                            print(ind_id, row)
+                            print("Best Individual = ", np.round(fitness, 4),  ", Step = ", step, '\r', end='')
                         best = fitness
                         no_change = 0
 
         return gaqx_log_df, baseline_full_data
 
     @staticmethod
-    def PSO(baseline_individual, options, n_particles, timeout=np.inf, steps=np.inf, steps_no_change=10, verbose=1):
+    def PSO(baseline_individual, options, n_particles, timeout=np.inf, steps=np.inf, topolgy=Star(), steps_no_change=10, verbose=1):
         gaqx_log_df = pd.DataFrame(columns=['ind', 'time', 'fitness'])
         ind_size = baseline_individual.X_train.shape[1]
         task = 'feature_selection'
@@ -630,7 +640,7 @@ class Evolution:
         population = np.array(population)
         population = population.astype(float)
         opt = ps.single.GeneralOptimizerPSO(n_particles=n_particles, dimensions=ind_size, init_pos=population,
-                                            topology=Star(), options=options)
+                                            topology=topolgy, options=options)
         step = 0
         best_cost = np.inf
         no_change = 0
@@ -648,4 +658,6 @@ class Evolution:
                 no_change = 0
                 best_pos = pos
                 best_cost = cost
+            if (verbose):
+                print("Best Individual = ", np.round(cost, 4), ", Step = ", step, '\r', end='')
         return gaqx_log_df
